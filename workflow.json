@@ -1,0 +1,671 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a026e8b0-8fb7-480a-bf4a-0444c64d12c5",
+              "leftValue": "={{ $json.body.action == 'opened' && $json.body.issue.labels.map(l => l.name).includes('bug') }}",
+              "rightValue": "open",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "e74d5e82-0078-43c5-8042-2821d9d0af58",
+              "leftValue": "={{ $json.body.sender.type }}",
+              "rightValue": "Bot",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "1cf331b5-5f7e-4f06-8bd9-1b109af1b22c",
+              "leftValue": "={{ ($json.body.issue.body || \"\").length }}",
+              "rightValue": 30,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "ea703ee1-de70-46e8-a2e6-bb91ac3c157a",
+      "name": "If",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e0cf807d-de1d-412d-ad94-d8b60c27ee81",
+              "name": "issue_number",
+              "value": "={{ $json.body.issue.number }}",
+              "type": "string"
+            },
+            {
+              "id": "18ebea55-7ee7-439e-aba7-1e3261c32786",
+              "name": "issue_title",
+              "value": "={{ $json.body.issue.title }}",
+              "type": "string"
+            },
+            {
+              "id": "d00e2bfb-28d1-4d64-a145-5b953d649c0d",
+              "name": "issue_body",
+              "value": "={{ $json.body.issue.body }}",
+              "type": "string"
+            },
+            {
+              "id": "43f013f3-0cea-48f9-9869-3355948ba400",
+              "name": "repo_name",
+              "value": "={{ $json.body.repository.name }}",
+              "type": "string"
+            },
+            {
+              "id": "a3cd21e8-9f1b-4bb5-884a-21566046353f",
+              "name": "repo_owner",
+              "value": "={{ $json.body.repository.owner.login }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        672,
+        -192
+      ],
+      "id": "d0e1faba-efb7-4cb6-af92-987d8a1b4973",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Issue Title: {{ $json.issue_title }}\nIssue Body: {{ $json.issue_body }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an expert autonomous GitHub triage assistant. Your job is to read the provided bug report (Title and Body) and generate a concise, technical troubleshooting plan. \n\nIf the bug report does not specify which file is causing the issue, use the list_directory and search_repo_code tools to explore the repository and find the relevant code before applying the fix.\n\nCRITICAL INSTRUCTIONS FOR OUTPUT:\n1. If you find the issue and can fix it: You MUST output your response strictly as a raw JSON object with exactly two keys: \"file_path\" (the name of the file to update) and \"new_code\" (the complete, corrected code). \n2. If you CANNOT find the file, or if the bug description is too vague: Do not keep searching endlessly. You MUST exit by outputting the same raw JSON object, but set \"file_path\" to \"ERROR\" and \"new_code\" to a polite message asking the user for specific logs, reproduction steps, or the correct filename.\n\nDo not include any conversational text, markdown formatting, or code block backticks (```) around the JSON."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        896,
+        -192
+      ],
+      "id": "e3ed29c8-88ea-4acf-8875-e0068c3bd193",
+      "name": "AI Agent",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        784,
+        -48
+      ],
+      "id": "e87e8e85-9f64-48c4-b966-cdc32c75a42d",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "bUqcjapxUqApAcXq",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Fetches the raw code contents of a specific file from the repository.",
+        "url": "=https://api.github.com/repos/{{ $('Edit Fields').item.json.repo_owner }}/{{ $('Edit Fields').item.json.repo_name }}/contents/{{ $json.file_path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3.raw"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        1088,
+        32
+      ],
+      "id": "9f7a8ef6-40aa-4b7b-b3e7-2855d68c2fc2",
+      "name": "HTTP Request",
+      "credentials": {
+        "githubApi": {
+          "id": "nbzrIFiz8Y00yeU7",
+          "name": "GitHub account"
+        }
+      },
+      "notes": "Fetches the raw code contents of a specific file from the repository."
+    },
+    {
+      "parameters": {
+        "owner": {
+          "__rl": true,
+          "value": "Owner",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "Repository",
+          "mode": "list",
+          "cachedResultName": "Repository",
+          "cachedResultUrl": "https://github.com/MuhammadQasimTahir/Repository"
+        },
+        "events": [
+          "issues"
+        ],
+        "options": {}
+      },
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [
+        160,
+        0
+      ],
+      "id": "34afb15d-4e10-414e-bc9e-707e69f19d3b",
+      "name": "Github Trigger",
+      "webhookId": "796bcf3e-cb02-42be-a990-146e0e3ec15b",
+      "executeOnce": false,
+      "credentials": {
+        "githubApi": {
+          "id": "nbzrIFiz8Y00yeU7",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $('Edit Fields').item.json.repo_owner }}/{{ $('Edit Fields').item.json.repo_name }}/git/refs/heads/main",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1264,
+        -192
+      ],
+      "id": "db70bae3-3199-4f97-b4c4-2a8c3ea57fc6",
+      "name": "HTTP Request1",
+      "credentials": {
+        "githubApi": {
+          "id": "nbzrIFiz8Y00yeU7",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/{{ $('Edit Fields').item.json.repo_owner }}/{{ $('Edit Fields').item.json.repo_name }}/git/refs",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"ref\": \"refs/heads/fix/issue-{{ $('Edit Fields').item.json.issue_number }}-{{ $now.toMillis() }}\",\n  \"sha\": \"{{ $json.object.sha }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1488,
+        -192
+      ],
+      "id": "6f9c9326-41e3-4192-a757-00a5874a63ca",
+      "name": "HTTP Request2",
+      "credentials": {
+        "githubApi": {
+          "id": "nbzrIFiz8Y00yeU7",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"file_path\": \"README.md\",\n  \"new_code\": \"The complete updated code goes here\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1232,
+        96
+      ],
+      "id": "b03d9251-cf60-46ad-80a9-f2a581ec66c2",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const agentData = $('AI Agent').item.json.output;\nconst fileSha = $('HTTP Request1').item.json.sha;\nconst issueNum = $('Edit Fields').item.json.issue_number;\nconst branchName = $('HTTP Request2').item.json.ref.replace('refs/heads/', '');\nconst encodedContent = Buffer.from(agentData.new_code, 'utf8').toString('base64');\n\nreturn {\n  json: {\n    file_path: agentData.file_path,\n    content: encodedContent,\n    sha: fileSha,\n    issue_number: issueNum,\n    branch: branchName\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1712,
+        -192
+      ],
+      "id": "0759224a-ecf8-4f3e-92dc-e8beb227d06f",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.github.com/repos/{{ $('Edit Fields').item.json.repo_owner }}/{{ $('Edit Fields').item.json.repo_name }}/contents/{{ $json.path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"message\": \"fix: update file from issue #\" + $('Edit Fields').item.json.issue_number,\n  \"content\": $('Code in JavaScript').item.json.content,\n  \"branch\": $('HTTP Request2').item.json.ref.replace('refs/heads/', ''),\n  \"sha\": $('HTTP Request4').item.json.sha\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1872,
+        64
+      ],
+      "id": "9f749fb3-e135-4447-b076-73453b0933fe",
+      "name": "HTTP Request3",
+      "credentials": {
+        "githubApi": {
+          "id": "nbzrIFiz8Y00yeU7",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $('Edit Fields').item.json.repo_owner }}/{{ $('Edit Fields').item.json.repo_name }}/contents/{{ $json.file_path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ref",
+              "value": "={{ $json.branch }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1936,
+        -192
+      ],
+      "id": "a49c6a53-a8ed-4506-8f7b-81b1ffa5f689",
+      "name": "HTTP Request4",
+      "credentials": {
+        "githubApi": {
+          "id": "nbzrIFiz8Y00yeU7",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/{{ $('Edit Fields').item.json.repo_owner }}/{{ $('Edit Fields').item.json.repo_name }}/pulls",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  title: \"Automated fix for Issue #\" + $('Edit Fields').item.json.issue_number,\n  body: \"This PR was generated automatically by the n8n Copilot Agent to resolve the reported bug.\\n\\nFixes #\" + $('Edit Fields').item.json.issue_number,\n  head: $('HTTP Request2').item.json.ref.replace('refs/heads/', ''),\n  base: \"main\" \n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2096,
+        64
+      ],
+      "id": "85533039-2fa7-4e71-ba1d-2aad67c806f2",
+      "name": "HTTP Request5",
+      "credentials": {
+        "githubApi": {
+          "id": "nbzrIFiz8Y00yeU7",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://discord.com/api/v10/channels/{{ $env.DISCORD_CHANNEL_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ \"Bot \" + $env.DISCORD_BOT_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  content: \"🚀 **New Copilot PR Generated!**\\n**Issue:** #\" + $('Edit Fields').item.json.issue_number,\n  components: [\n    {\n      type: 1,\n      components: [\n        {\n          type: 2,\n          style: 5,\n          label: \"Review & Approve PR\",\n          url: $('HTTP Request5').item.json.html_url\n        }\n      ]\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2320,
+        64
+      ],
+      "id": "e8dd1750-5f23-44bd-ae01-9bde1fe028b6",
+      "name": "HTTP Request6"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Lists all files and folders in a specific directory of the repository. Pass an empty string to view the root directory.",
+        "url": "=https://api.github.com/repos/{{ $('Edit Fields').item.json.repo_owner }}/{{ $('Edit Fields').item.json.repo_name }}/contents/{{ $json.directory_path || '' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        896,
+        48
+      ],
+      "id": "e49eb331-0f43-4426-a41b-9858b349bc6a",
+      "name": "list_directory",
+      "credentials": {
+        "githubApi": {
+          "id": "nbzrIFiz8Y00yeU7",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Searches for specific code snippets, functions, or keywords across the repository. Input should be a search query string.",
+        "url": "=https://api.github.com/search/code?q={{ encodeURIComponent($json.query) }}+repo:{{ $('Edit Fields').item.json.repo_owner }}/{{ $('Edit Fields').item.json.repo_name }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        992,
+        160
+      ],
+      "id": "4d0bcf73-5913-4aff-b633-da8273557a2f",
+      "name": "search_repo_code",
+      "credentials": {
+        "githubApi": {
+          "id": "nbzrIFiz8Y00yeU7",
+          "name": "GitHub account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Github Trigger": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request4": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request5": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "list_directory": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search_repo_code": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0d657107-a156-47a4-8da0-368f7f2cc879",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "39a382882a26e45fd58e87f5a4d619be17a177ce7e2ff51640194fec74d8541b"
+  },
+  "nodeGroups": [],
+  "id": "EugyXvEBgT8kZ2XW",
+  "tags": []
+}
